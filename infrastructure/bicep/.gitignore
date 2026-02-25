@@ -3,11 +3,14 @@
 # Parameter files with secrets
 parameters.*.json
 !parameters.*.example.json
+# Integration test parameters contain no secrets (password supplied via CI secrets)
+!parameters.integration-test.json
 
 # Generated ARM templates
 *.json
 !bicepconfig.json
 !parameters.*.example.json
+!parameters.integration-test.json
 
 # Bicep build artifacts
 *.build.bicep
