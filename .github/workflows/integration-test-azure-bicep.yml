@@ -1,0 +1,209 @@
+name: Integration Test - Bicep Private Deployment
+
+# =============================================================================
+# Trigger
+# =============================================================================
+# Run manually and supply Azure credentials via repository secrets:
+#   AZURE_CLIENT_ID       — service principal / managed-identity client ID
+#   AZURE_TENANT_ID       — Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID — target subscription
+#   PSQL_ADMIN_PASSWORD   — PostgreSQL administrator password
+#
+# OIDC federated credentials are the recommended approach; configure a
+# federated identity credential on the service principal that trusts this
+# workflow's subject before running.
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: 'Azure region for deployment (e.g. eastus, westus2)'
+        required: true
+        default: 'eastus'
+        type: string
+      cleanup:
+        description: 'Delete all resources after the test completes'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write   # Required to request an OIDC token for Azure login
+  contents: read
+
+# =============================================================================
+# Job
+# =============================================================================
+jobs:
+  deploy-and-test:
+    name: Bicep Private Deployment + TES Task Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      BICEP_DIR: infrastructure/bicep
+      DEPLOYMENT_NAME: tes-integ-${{ github.run_id }}
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # -----------------------------------------------------------------------
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      # -----------------------------------------------------------------------
+      - name: Validate Bicep templates
+        run: |
+          echo "Building main template to catch compilation errors..."
+          az bicep build --file "$BICEP_DIR/main.bicep"
+          echo "✓ Bicep template validation passed"
+
+      # -----------------------------------------------------------------------
+      - name: Deploy Bicep infrastructure (private networking enabled)
+        id: deploy
+        run: |
+          echo "Deploying: $DEPLOYMENT_NAME"
+          echo "Location : ${{ inputs.location }}"
+          echo "Template : $BICEP_DIR/main.bicep"
+          echo "Params   : $BICEP_DIR/parameters.integration-test.json"
+          echo ""
+
+          OUTPUT=$(az deployment sub create \
+            --name "$DEPLOYMENT_NAME" \
+            --location "${{ inputs.location }}" \
+            --template-file "$BICEP_DIR/main.bicep" \
+            --parameters "@$BICEP_DIR/parameters.integration-test.json" \
+              location="${{ inputs.location }}" \
+              postgreSqlAdministratorPassword="${{ secrets.PSQL_ADMIN_PASSWORD }}" \
+            --output json)
+
+          RG=$(echo "$OUTPUT"      | jq -r '.properties.outputs.resourceGroupName.value')
+          AKS=$(echo "$OUTPUT"     | jq -r '.properties.outputs.aksClusterName.value')
+          BATCH=$(echo "$OUTPUT"   | jq -r '.properties.outputs.batchAccountName.value')
+          STORAGE=$(echo "$OUTPUT" | jq -r '.properties.outputs.storageAccountName.value')
+          PSQL=$(echo "$OUTPUT"    | jq -r '.properties.outputs.postgreSqlServerName.value')
+          KV=$(echo "$OUTPUT"      | jq -r '.properties.outputs.keyVaultUri.value')
+
+          echo "resource_group=$RG"     >> "$GITHUB_OUTPUT"
+          echo "aks_cluster=$AKS"       >> "$GITHUB_OUTPUT"
+          echo "batch_account=$BATCH"   >> "$GITHUB_OUTPUT"
+          echo "storage_account=$STORAGE" >> "$GITHUB_OUTPUT"
+          echo "postgresql_server=$PSQL" >> "$GITHUB_OUTPUT"
+          echo "key_vault_uri=$KV"      >> "$GITHUB_OUTPUT"
+
+          echo ""
+          echo "✓ Bicep deployment succeeded"
+          echo "  Resource Group    : $RG"
+          echo "  AKS Cluster       : $AKS"
+          echo "  Batch Account     : $BATCH"
+          echo "  Storage Account   : $STORAGE"
+          echo "  PostgreSQL Server : $PSQL"
+          echo "  Key Vault URI     : $KV"
+
+      # -----------------------------------------------------------------------
+      # Verify the private AKS cluster is healthy.
+      # az aks command invoke works for private clusters because it routes
+      # through the Azure Resource Manager API — no public cluster endpoint needed.
+      # -----------------------------------------------------------------------
+      - name: Verify private AKS cluster node readiness
+        run: |
+          RG="${{ steps.deploy.outputs.resource_group }}"
+          AKS="${{ steps.deploy.outputs.aks_cluster }}"
+
+          echo "Waiting for all AKS nodes to be Ready..."
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "kubectl wait node --all --for=condition=Ready --timeout=300s && kubectl get nodes -o wide"
+
+          echo "✓ All AKS nodes are Ready"
+
+      # -----------------------------------------------------------------------
+      # Run the TES task integration test entirely inside the cluster.
+      # The test-tes-task.sh script is uploaded into the `az aks command invoke`
+      # runner pod via --file, then executed with bash.
+      #
+      # The script:
+      #   1. Checks TES deployment readiness
+      #   2. Submits a simple "echo" TES task via the cluster-internal service
+      #      (http://tes.tes.svc.cluster.local) — only reachable inside the VNet
+      #   3. Polls the task until COMPLETE, EXECUTOR_ERROR, or timeout
+      # -----------------------------------------------------------------------
+      - name: Run TES integration test task
+        id: tes-test
+        run: |
+          RG="${{ steps.deploy.outputs.resource_group }}"
+          AKS="${{ steps.deploy.outputs.aks_cluster }}"
+
+          echo "Submitting test TES task via private cluster (az aks command invoke)..."
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "bash test-tes-task.sh" \
+            --file "$BICEP_DIR/test-tes-task.sh"
+
+      # -----------------------------------------------------------------------
+      - name: Collect diagnostic logs on test failure
+        if: failure() && steps.tes-test.outcome == 'failure'
+        run: |
+          RG="${{ steps.deploy.outputs.resource_group }}"
+          AKS="${{ steps.deploy.outputs.aks_cluster }}"
+
+          echo "=== TES Pod Logs ==="
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "kubectl logs -n tes deployment/tes --tail=200" || true
+
+          echo "=== Pod / Node Status ==="
+          az aks command invoke \
+            --resource-group "$RG" \
+            --name "$AKS" \
+            --command "kubectl get pods -n tes -o wide && kubectl describe pods -n tes" || true
+
+      # -----------------------------------------------------------------------
+      - name: Delete resource group (cleanup)
+        if: always() && inputs.cleanup == true
+        run: |
+          RG="${{ steps.deploy.outputs.resource_group }}"
+          if [ -n "$RG" ]; then
+            echo "Deleting resource group: $RG"
+            az group delete --name "$RG" --yes --no-wait
+            echo "✓ Resource group deletion initiated (runs asynchronously)"
+          fi
+
+      # -----------------------------------------------------------------------
+      - name: Write job summary
+        if: always()
+        run: |
+          RESULT="${{ steps.tes-test.outcome }}"
+          RESULT_ICON="$( [ "$RESULT" = 'success' ] && echo '✅ PASSED' || echo '❌ FAILED' )"
+
+          {
+            echo "## Integration Test Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Deployment name    | \`$DEPLOYMENT_NAME\` |"
+            echo "| Location           | ${{ inputs.location }} |"
+            echo "| Private networking | ✅ Enabled |"
+            echo "| Resource group     | \`${{ steps.deploy.outputs.resource_group }}\` |"
+            echo "| AKS cluster        | \`${{ steps.deploy.outputs.aks_cluster }}\` |"
+            echo "| Batch account      | \`${{ steps.deploy.outputs.batch_account }}\` |"
+            echo "| Storage account    | \`${{ steps.deploy.outputs.storage_account }}\` |"
+            echo "| PostgreSQL server  | \`${{ steps.deploy.outputs.postgresql_server }}\` |"
+            echo "| Key Vault URI      | ${{ steps.deploy.outputs.key_vault_uri }} |"
+            echo "| TES task result    | $RESULT_ICON |"
+            echo "| Cleanup scheduled  | ${{ inputs.cleanup }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

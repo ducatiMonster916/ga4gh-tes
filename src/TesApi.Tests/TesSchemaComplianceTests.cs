@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
 using System;
@@ -320,3 +320,14 @@ namespace TesApi.Tests
         }
     }
 }
+        // [ ... omitted unchanged content ... ] // Keep all the rest of the file as is
+
+            // Verify the JSON uses the correct GA4GH field names
+            Assert.IsTrue(json.Contains("creation_time"), "JSON must use 'creation_time' (not 'CreationTime')");
+            Assert.IsTrue(json.Contains("cpu_cores"), "JSON must use 'cpu_cores' (not 'CpuCores')");
+            Assert.IsTrue(json.Contains("ram_gb"), "JSON must use 'ram_gb' (not 'RamGb')");
+            Assert.IsTrue(json.Contains("disk_gb"), "JSON must use 'disk_gb' (not 'DiskGb')");
+// ... and ...
+            Assert.IsTrue(json.Contains("QUEUED"),
+                "TesState must serialize as a string (e.g. 'QUEUED'), not an integer");
+// [ ... ]
