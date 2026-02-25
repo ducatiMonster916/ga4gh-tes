@@ -180,7 +180,8 @@ namespace GenerateBatchVmSkus
                             o.Retry.MaxRetries = retryPolicy.Value.MaxRetryCount;
                             o.Retry.Delay = TimeSpan.FromSeconds(retryPolicy.Value.ExponentialBackOffExponent);
                             return o;
-                        };
+                        }
+                        ;
 
                         //static T SetOrDefault<T>(string? test, Func<string, T> apply, T @default)
                         //    => string.IsNullOrEmpty(test) ? @default : apply(test);
