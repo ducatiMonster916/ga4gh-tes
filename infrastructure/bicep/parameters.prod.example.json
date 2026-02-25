@@ -1,0 +1,98 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "mainIdentifierPrefix": {
+      "value": "tes-prod"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "deploymentEnvironment": {
+      "value": "production"
+    },
+    "resourceGroupName": {
+      "value": ""
+    },
+    "vnetAddressSpace": {
+      "value": "10.1.0.0/16"
+    },
+    "vmSubnetAddressSpace": {
+      "value": "10.1.0.0/24"
+    },
+    "postgreSqlSubnetAddressSpace": {
+      "value": "10.1.1.0/24"
+    },
+    "batchNodesSubnetAddressSpace": {
+      "value": "10.1.128.0/17"
+    },
+    "postgreSqlAdministratorLogin": {
+      "value": "tesadmin"
+    },
+    "postgreSqlAdministratorPassword": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/{subscription-id}/resourceGroups/{rg-name}/providers/Microsoft.KeyVault/vaults/{vault-name}"
+        },
+        "secretName": "postgresql-admin-password"
+      }
+    },
+    "postgreSqlDatabaseName": {
+      "value": "tes_db"
+    },
+    "postgreSqlSkuName": {
+      "value": "Standard_D2ds_v4"
+    },
+    "postgreSqlTier": {
+      "value": "GeneralPurpose"
+    },
+    "postgreSqlVersion": {
+      "value": "16"
+    },
+    "postgreSqlStorageSize": {
+      "value": 128
+    },
+    "storageAccountName": {
+      "value": ""
+    },
+    "batchAccountName": {
+      "value": ""
+    },
+    "appInsightsName": {
+      "value": ""
+    },
+    "keyVaultName": {
+      "value": ""
+    },
+    "aksPoolSize": {
+      "value": 3
+    },
+    "aksVmSize": {
+      "value": "Standard_D4s_v3"
+    },
+    "kubernetesVersion": {
+      "value": "1.31"
+    },
+    "kubernetesServiceCidr": {
+      "value": "10.0.0.0/16"
+    },
+    "kubernetesDnsServiceIP": {
+      "value": "10.0.0.10"
+    },
+    "enablePrivateNetworking": {
+      "value": false
+    },
+    "aadGroupIds": {
+      "value": []
+    },
+    "tags": {
+      "value": {
+        "CostCenter": "Engineering",
+        "Owner": "TES-Team"
+      }
+    },
+    "debugLogging": {
+      "value": false
+    }
+  }
+}
