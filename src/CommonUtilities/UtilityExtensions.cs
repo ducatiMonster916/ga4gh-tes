@@ -118,7 +118,8 @@ namespace CommonUtilities
             foreach (var value in values)
             {
                 dictionary.Add(value);
-            };
+            }
+            ;
         }
         #endregion
     }
