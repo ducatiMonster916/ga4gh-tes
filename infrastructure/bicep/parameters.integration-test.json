@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "mainIdentifierPrefix": {
+      "value": "tesit"
+    },
+    "deploymentEnvironment": {
+      "value": "integration-test"
+    },
+    "vnetAddressSpace": {
+      "value": "10.1.0.0/16"
+    },
+    "vmSubnetAddressSpace": {
+      "value": "10.1.0.0/24"
+    },
+    "postgreSqlSubnetAddressSpace": {
+      "value": "10.1.1.0/24"
+    },
+    "batchNodesSubnetAddressSpace": {
+      "value": "10.1.128.0/17"
+    },
+    "kubernetesServiceCidr": {
+      "value": "10.1.4.0/22"
+    },
+    "kubernetesDnsServiceIP": {
+      "value": "10.1.4.10"
+    },
+    "postgreSqlAdministratorLogin": {
+      "value": "tesadmin"
+    },
+    "postgreSqlDatabaseName": {
+      "value": "tes_db"
+    },
+    "postgreSqlSkuName": {
+      "value": "Standard_B2s"
+    },
+    "postgreSqlTier": {
+      "value": "Burstable"
+    },
+    "postgreSqlVersion": {
+      "value": "14"
+    },
+    "postgreSqlStorageSize": {
+      "value": 32
+    },
+    "aksPoolSize": {
+      "value": 2
+    },
+    "aksVmSize": {
+      "value": "Standard_D4s_v3"
+    },
+    "enablePrivateNetworking": {
+      "value": true
+    },
+    "tags": {
+      "value": {
+        "Purpose": "IntegrationTest",
+        "AutoDelete": "true"
+      }
+    }
+  }
+}

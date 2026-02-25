@@ -1,0 +1,31 @@
+# Bicep Infrastructure Directory
+
+# Parameter files with secrets
+parameters.*.json
+!parameters.*.example.json
+# Integration test parameters contain no secrets (password supplied via CI secrets)
+!parameters.integration-test.json
+
+# Generated ARM templates
+*.json
+!bicepconfig.json
+!parameters.*.example.json
+!parameters.integration-test.json
+
+# Bicep build artifacts
+*.build.bicep
+
+# IDE files
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Azure CLI output
+deployment-output.json
+what-if-output.json
